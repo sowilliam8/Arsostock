@@ -40,8 +40,6 @@ def save_data(data: Dict):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-
-def get_stock_info(ticker: str) -> Dict:
 def get_stock_info(ticker: str) -> Dict:
     """更穩定的港股資料抓取（加入 fallback）"""
     try:
