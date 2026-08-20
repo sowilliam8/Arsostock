@@ -42,29 +42,53 @@ def save_data(data: Dict):
 
 
 def get_stock_info(ticker: str) -> Dict:
+def get_stock_info(ticker: str) -> Dict:
+    """更穩定的港股資料抓取（加入 fallback）"""
     try:
         t = yf.Ticker(ticker)
-        info = t.info
         
-        current = info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose")
-        prev_close = info.get("previousClose") or current
-        volume = info.get("volume") or info.get("regularMarketVolume") or 0
-        name = info.get("longName") or info.get("shortName") or ticker
-        pe = info.get("trailingPE")
-        div_yield = info.get("dividendYield") or info.get("trailingAnnualDividendYield")
+        # 方法1：優先用 history（比 .info 穩定）
+        hist = t.history(period="5d")
+        if hist.empty:
+            # 方法2：再試一次短一點的區間
+            hist = t.history(period="1mo")
         
-        if div_yield is not None and div_yield < 1:
-            div_yield = div_yield * 100
-            
+        if not hist.empty:
+            current = float(hist['Close'].iloc[-1])
+            prev_close = float(hist['Close'].iloc[-2]) if len(hist) >= 2 else current
+            volume = int(hist['Volume'].iloc[-1]) if 'Volume' in hist.columns else 0
+        else:
+            # 方法3：最後才用 .info
+            info = t.info
+            current = info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose")
+            prev_close = info.get("previousClose") or current
+            volume = info.get("volume") or info.get("regularMarketVolume") or 0
+            if current is None:
+                return {"success": False, "error": "Yahoo 沒有回傳價格資料"}
+        
+        # 公司名稱與其他資料
+        try:
+            info = t.info
+            name = info.get("longName") or info.get("shortName") or ticker
+            pe = info.get("trailingPE")
+            div_yield = info.get("dividendYield") or info.get("trailingAnnualDividendYield")
+            if div_yield is not None and div_yield < 1:
+                div_yield = div_yield * 100
+        except:
+            name = ticker
+            pe = None
+            div_yield = None
+        
         return {
             "success": True,
             "name": name,
-            "current": float(current) if current else None,
-            "prev_close": float(prev_close) if prev_close else None,
+            "current": float(current),
+            "prev_close": float(prev_close),
             "volume": int(volume) if volume else 0,
             "pe": float(pe) if pe else None,
             "div_yield": float(div_yield) if div_yield else None,
         }
+        
     except Exception as e:
         return {"success": False, "error": str(e)}
 
